@@ -1,9 +1,11 @@
 package gogin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/gin-gonic/gin"
 
 	"github.com/haier-interx/e"
 )
@@ -41,6 +43,11 @@ func NewErrResponse(err error, detail string) *Response {
 		return &Response{&BaseResponse{v.Code, v.Msg, detail}, nil}
 	}
 
+	// context cancel
+	if err == context.DeadlineExceeded {
+		return &Response{&BaseResponse{e.COMMON_INTERNAL_BADGATEWAY.Code, e.COMMON_INTERNAL_BADGATEWAY.Msg, detail}, nil}
+	}
+
 	parent_err := errors.Unwrap(err)
 	switch v := parent_err.(type) {
 	case *e.Err:
@@ -49,4 +56,38 @@ func NewErrResponse(err error, detail string) *Response {
 
 	v := e.COMMON_INTERNAL_ERR
 	return &Response{&BaseResponse{v.Code, v.Msg, detail}, nil}
+}
+
+func SendData(ctx *gin.Context, v interface{}) {
+	SendResp(ctx, NewSucResponse(v))
+}
+
+func SendErrResp(ctx *gin.Context, err error, detail string) {
+	SendResp(ctx, NewErrResponse(err, detail))
+}
+
+func SendResp(ctx *gin.Context, resp *Response) {
+	if resp.Code != 10000 {
+		if resp.Detail != "" {
+			PushCtxErr(ctx, fmt.Errorf("%d :: %s :: %s", resp.Code, resp.Message, resp.Detail))
+		} else {
+			PushCtxErr(ctx, fmt.Errorf("%d :: %s", resp.Code, resp.Message))
+		}
+		ctx.Abort()
+	}
+
+	//if !GetQueryParamBool(ctx, "debug") {
+	//	resp.Detail = ""
+	//}
+
+	ctx.Set("Response", resp)
+	if GetQueryParamBool(ctx, "pretty") || GetQueryParamBool(ctx, "debug") {
+		ctx.IndentedJSON(200, resp)
+	} else {
+		ctx.JSON(200, resp)
+	}
+}
+
+func PushCtxErr(ctx *gin.Context, err error) {
+	ctx.Error(gin.Error{Err: err, Type: gin.ErrorTypePrivate})
 }

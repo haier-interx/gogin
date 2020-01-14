@@ -12,7 +12,8 @@ func Recovery() gin.HandlerFunc {
 
 		// panic 返回正常格式结果
 		if c.IsAborted() && c.Writer.Status() == http.StatusInternalServerError {
-			c.JSON(200, NewErrResponse(e.COMMON_INTERNAL_ERR, "[Omg! panic!]"))
+			//c.JSON(200, NewErrResponse(e.COMMON_INTERNAL_ERR, "[Omg! panic!]"))
+			SendErrResp(c, e.COMMON_INTERNAL_ERR, "[Omg! panic!]")
 		}
 	}
 }

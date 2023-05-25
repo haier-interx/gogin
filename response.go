@@ -5,9 +5,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/gin-gonic/gin"
+	"net/http"
 
+	"github.com/gin-gonic/gin"
 	"github.com/haier-interx/e"
+)
+
+const (
+	HeaderHDSRequest      = "X-GATEWAY" // HDS网关请求标识
+	HeaderHDSRequestValue = HeaderHDSRequest
 )
 
 type Response struct {
@@ -48,8 +54,8 @@ func NewErrResponse(err error, detail string) *Response {
 		return &Response{&BaseResponse{e.COMMON_INTERNAL_BADGATEWAY.Code, e.COMMON_INTERNAL_BADGATEWAY.Msg, detail}, nil}
 	}
 
-	parent_err := errors.Unwrap(err)
-	switch v := parent_err.(type) {
+	parentErr := errors.Unwrap(err)
+	switch v := parentErr.(type) {
 	case *e.Err:
 		return &Response{&BaseResponse{v.Code, v.Msg, detail}, nil}
 	}
@@ -67,7 +73,7 @@ func SendErrResp(ctx *gin.Context, err error, detail string) {
 }
 
 func SendResp(ctx *gin.Context, resp *Response) {
-	if resp.Code != 10000 {
+	if resp.Code != e.COMMON_SUC.Code {
 		if resp.Detail != "" {
 			PushCtxErr(ctx, fmt.Errorf("%d :: %s :: %s", resp.Code, resp.Message, resp.Detail))
 		} else {
@@ -75,19 +81,66 @@ func SendResp(ctx *gin.Context, resp *Response) {
 		}
 		ctx.Abort()
 	}
-
-	//if !GetQueryParamBool(ctx, "debug") {
-	//	resp.Detail = ""
-	//}
-
 	ctx.Set("Response", resp)
-	if GetQueryParamBool(ctx, "pretty") || GetQueryParamBool(ctx, "debug") {
-		ctx.IndentedJSON(200, resp)
-	} else {
-		ctx.JSON(200, resp)
+
+	// 1、不是从HDS网关过来的请求,响应不变
+	// 2、成功请求,响应不变
+	if !requestFromHdsGateway(ctx) || resp.Code == e.COMMON_SUC.Code {
+		if GetQueryParamBool(ctx, "pretty") || GetQueryParamBool(ctx, "debug") {
+			ctx.IndentedJSON(200, resp)
+		} else {
+			ctx.JSON(200, resp)
+		}
+		return
 	}
+	// http code 重写
+	httpCode := respBodyCodeToHttpStatusCode(resp.Code)
+	if GetQueryParamBool(ctx, "pretty") || GetQueryParamBool(ctx, "debug") {
+		ctx.IndentedJSON(httpCode, resp)
+	} else {
+		ctx.JSON(httpCode, resp)
+	}
+	return
 }
 
 func PushCtxErr(ctx *gin.Context, err error) {
 	ctx.Error(gin.Error{Err: err, Type: gin.ErrorTypePrivate})
+}
+
+// 判断请求是不是从HDS网关过来的
+func requestFromHdsGateway(ctx *gin.Context) bool {
+	h := ctx.GetHeader(HeaderHDSRequest)
+	if h == HeaderHDSRequestValue {
+		return true
+	}
+	return false
+}
+
+// 根据响应body的code转换成对应的http code
+func respBodyCodeToHttpStatusCode(respBodyCode int) int {
+	switch respBodyCode {
+	case e.COMMON_BADREQUEST.Code,
+		e.COMMON_PARAM_ERR.Code,
+		e.COMMON_PARAM_MISS.Code:
+		return http.StatusBadRequest
+	case e.COMMON_NOT_FOUND.Code:
+		return http.StatusNotFound
+	case e.COMMON_CONFILCT.Code:
+		return http.StatusConflict
+	case e.COMMON_INTERNAL_ERR.Code,
+		e.COMMON_INTERNAL_CALLING_ERR.Code,
+		e.COMMON_INTERNAL_CALLING_TIMEOUT.Code,
+		e.COMMON_INTERNAL_DB_ERR.Code,
+		e.COMMON_INTERNAL_BADGATEWAY.Code:
+		return http.StatusInternalServerError
+	case e.AUTH_NOTLOGIN.Code:
+		return http.StatusUnauthorized
+	case e.AUTH_NOPERMISSION.Code,
+		e.AUTHINTERNAL_ROLE_NOT_DEFINED.Code,
+		e.AUTHINTERNAL_ROLE_NOT_SUPPORT.Code,
+		e.AUTHINTERNAL_ROLE_INVALID.Code:
+		return http.StatusForbidden
+	default:
+		return http.StatusOK
+	}
 }

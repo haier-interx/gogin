@@ -116,6 +116,11 @@ func requestFromHdsGateway(ctx *gin.Context) bool {
 	return false
 }
 
+// RequestIsFromHdsGateway 判断请求是不是从HDS网关过来的
+func RequestIsFromHdsGateway(ctx *gin.Context) bool {
+	return requestFromHdsGateway(ctx)
+}
+
 // 根据响应body的code转换成对应的http code
 func respBodyCodeToHttpStatusCode(respBodyCode int) int {
 	switch respBodyCode {

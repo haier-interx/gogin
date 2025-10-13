@@ -18,13 +18,13 @@ const (
 
 type Response struct {
 	*BaseResponse
-	Data interface{} `json:"data,omitempty"`
+	Data interface{} `json:"data,omitempty"` // 响应数据主体，根据不同接口返回不同类型的数据
 }
 
 type BaseResponse struct {
-	Code    int    `json:"code" example:"10000"` // 10000:成功 <br> 10004: 未发现 <br> 15000: 内部错误 <br> https://github.com/haier-interx/e
-	Message string `json:"msg" example:"success"`
-	Detail  string `json:"detail,omitempty" example:""`
+	Code    int    `json:"code" example:"10000"`        // 10000:成功 <br> 10004: 未发现 <br> 15000: 内部错误 <br> https://github.com/haier-interx/e
+	Message string `json:"msg" example:"success"`       // 操作结果描述，简洁明了的消息提示
+	Detail  string `json:"detail,omitempty" example:""` // 可选字段，详细的错误信息或操作结果详情
 }
 
 func NewResponse(data []byte) (*Response, error) {
